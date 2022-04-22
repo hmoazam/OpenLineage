@@ -329,7 +329,7 @@ jobs:
       - run: chmod 777 airflow && chmod 777 common && chmod 777 ../client/python
       - run: ./airflow/tests/integration/docker/up.sh
       - store_artifacts:
-          path: integration/airflow/tests/integration/tests/airflow/logs
+          path: airflow/tests/integration/tests/airflow/logs
           destination: airflow-logs
 
 
@@ -349,7 +349,7 @@ jobs:
       - run: chmod 777 airflow && chmod 777 common && chmod 777 ../client/python
       - run: AIRFLOW_IMAGE=<< parameters.airflow-image >> ./airflow/tests/integration/docker/up-2.sh
       - store_artifacts:
-          path: integration/airflow/tests/integration/tests/airflow/logs
+          path: airflow/tests/integration/tests/airflow/logs
           destination: airflow-logs
 
   unit-test-integration-dagster:
