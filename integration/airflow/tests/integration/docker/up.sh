@@ -47,8 +47,10 @@ docker-compose -f tests/docker-compose.yml down
 
 # Run airflow-init first, because rest of airflow containers can die if the database is not prepared.
 docker-compose -f tests/docker-compose.yml up  -V --build --abort-on-container-exit airflow_init postgres
-docker-compose -f tests/docker-compose.yml up --build --exit-code-from integration --scale airflow_init=0
+docker-compose -f tests/docker-compose.yml up --build --exit-code-from integration --scale airflow_init=0 || FAILED=1
 
 docker create --name openlineage-volume-helper $AIRFLOW_VOLUME:/opt/airflow busybox
 docker cp openlineage-volume-helper:/opt/airflow/logs tests/airflow/
 docker rm openlineage-volume-helper
+
+exit $FAILED
