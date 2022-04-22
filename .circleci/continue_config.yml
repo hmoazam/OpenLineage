@@ -326,6 +326,7 @@ jobs:
       - gcp-cli/install
       - gcp-cli/initialize
       - run: ../.circleci/get-docker-compose.sh
+      - run: chmod 777 airflow && chmod 777 common && chmod 777 ../client/python
       - run: ./airflow/tests/integration/docker/up.sh
       - store_artifacts:
           path: integration/airflow/tests/integration/tests/airflow/logs
@@ -345,6 +346,7 @@ jobs:
       - gcp-cli/install
       - gcp-cli/initialize
       - run: ../.circleci/get-docker-compose.sh
+      - run: chmod 777 airflow && chmod 777 common && chmod 777 ../client/python
       - run: AIRFLOW_IMAGE=<< parameters.airflow-image >> ./airflow/tests/integration/docker/up-2.sh
       - store_artifacts:
           path: integration/airflow/tests/integration/tests/airflow/logs
