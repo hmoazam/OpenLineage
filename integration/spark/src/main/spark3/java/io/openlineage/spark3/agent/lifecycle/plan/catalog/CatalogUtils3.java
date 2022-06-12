@@ -24,7 +24,8 @@ public class CatalogUtils3 {
             new DeltaHandler(),
             new DatabricksDeltaHandler(),
             new JdbcHandler(),
-            new V2SessionCatalogHandler());
+            new V2SessionCatalogHandler(),
+            new CosmosDBHandler());
     return handlers.stream().filter(CatalogHandler::hasClasses).collect(Collectors.toList());
   }
 
