@@ -94,28 +94,65 @@ public class PlanUtils3 {
       DataSourceV2Relation relation,
       OpenLineage.DatasetFacetsBuilder datasetFacetsBuilder) {
 
+    boolean isCosmos = false;
+    // Moved declarataions up here to avoid compiler errors
+    Identifier identifier;
+    Optional<DatasetIdentifier> di;
     if (relation.identifier().isEmpty()) {
-      List<D> datasetNoIdentifer =
-          fromDataSourceV2RelationWithNoIdentifier(
-              datasetFactory, context, relation, datasetFacetsBuilder);
-      if (datasetNoIdentifer.size() > 0) {
-        return datasetNoIdentifer;
+      // Seems like the identifier is empty for cosmos
+      // System.out.println("Relation: " + relation);
+      // System.out.println("Identifier: " + relation.identifier());
+      // System.out.println("Testing Will's tablename: " + relation.table().name());
+      // System.out.println("Context: " + context);
+      // System.out.println("Catalog: " + relation.catalog().get());
+      if (relation.table().name().contains("com.azure.cosmos.spark.items.")) {
+        System.out.println("Testing cosmos identifier hellooooo");
+        isCosmos = true;
+      } else {
+        throw new IllegalArgumentException(
+            "Couldn't find identifier for dataset in plan " + relation);
       }
-      throw new IllegalArgumentException(
-          "Couldn't find identifier for dataset in plan " + relation);
-    }
-    Identifier identifier = relation.identifier().get();
-    if (relation.catalog().isEmpty() || !(relation.catalog().get() instanceof TableCatalog)) {
-      throw new IllegalArgumentException("Couldn't find catalog for dataset in plan " + relation);
     }
 
-    Map<String, String> tableProperties = relation.table().properties();
-    TableCatalog tableCatalog = null;
-    Optional<DatasetIdentifier> di = Optional.empty();
-    if (!relation.catalog().isEmpty()) {
-      tableCatalog = (TableCatalog) relation.catalog().get();
-      di = PlanUtils3.getDatasetIdentifier(context, tableCatalog, identifier, tableProperties);
+    if (isCosmos) {
+      // Artificially creating the identifier
+      String relationName = relation.table().name().replace("com.azure.cosmos.spark.items.", "");
+      int expectedParts = 3;
+      String[] tableParts = relationName.split("\\.", expectedParts);
+      String tableName;
+      String namespace;
+      if (tableParts.length != expectedParts) {
+        tableName = relationName;
+        namespace = relationName;
+      } else {
+        namespace =
+            String.format(
+                "azurecosmos://%s.documents.azure.com/dbs/%s", tableParts[0], tableParts[1]);
+        tableName = String.format("/colls/%s", tableParts[2]);
+      }
+      String[] namespaceArr = new String[1];
+      namespaceArr[0] = namespace;
+      identifier = org.apache.spark.sql.connector.catalog.Identifier.of(namespaceArr, tableName);
+
+      // try create a dummy tableCatalog
+      // Map<String, String> dummyProperties =
+      //     org.apache.spark.sql.util.CaseInsensitiveStringMap(
+      //         Collections.<String, String>emptyMap());
+      // TableCatalog cosmosCatalog =
+      //     org.apache.spark.sql.connector.catalog.TableCatalog.initialize(
+      //         tableName, dummyProperties);
+
+    } else { // the old code
+      identifier = relation.identifier().get();
+      if (relation.catalog().isEmpty() || !(relation.catalog().get() instanceof TableCatalog)) {
+        throw new IllegalArgumentException("Couldn't find catalog for dataset in plan " + relation);
+      }
     }
+
+    TableCatalog tableCatalog = (TableCatalog) relation.catalog().get();
+
+    Map<String, String> tableProperties = relation.table().properties();
+    di = PlanUtils3.getDatasetIdentifier(context, tableCatalog, identifier, tableProperties);
 
     if (!di.isPresent()) {
       return Collections.emptyList();
@@ -136,15 +173,13 @@ public class PlanUtils3 {
   public static Optional<DataSourceV2Relation> getDataSourceV2Relation(LogicalPlan x) {
     NamedRelation table = null;
 
-    // INSERT OVERWRITE TABLE SQL statement is translated into InsertIntoTable
-    // logical operator.
+    // INSERT OVERWRITE TABLE SQL statement is translated into InsertIntoTable logical operator.
     if (x instanceof V2WriteCommand) {
       table = ((V2WriteCommand) x).table();
     } else if (x instanceof InsertIntoStatement) {
       table = (NamedRelation) ((InsertIntoStatement) x).table();
     } else if (new IcebergHandler().hasClasses() && x instanceof ReplaceData) {
-      // DELETE FROM on ICEBERG HAS START ELEMENT WITH ReplaceData AND COMPLETE ONE
-      // WITH
+      // DELETE FROM on ICEBERG HAS START ELEMENT WITH ReplaceData AND COMPLETE ONE WITH
       // DeleteFromTable
       table = ((ReplaceData) x).table();
     } else if (x instanceof DeleteFromTable) {
@@ -155,43 +190,5 @@ public class PlanUtils3 {
       table = (NamedRelation) ((MergeIntoTable) x).targetTable();
     }
     return Optional.ofNullable((DataSourceV2Relation) table);
-  }
-
-  /**
-   * In some cases, a DataSourceV2 is not updating the properties and does not provide the
-   * identifier or catalog fields. In this case we need to extract it in a custom way
-   */
-  private static <D extends OpenLineage.Dataset> List<D> fromDataSourceV2RelationWithNoIdentifier(
-      DatasetFactory<D> datasetFactory,
-      OpenLineageContext context,
-      DataSourceV2Relation relation,
-      OpenLineage.DatasetFacetsBuilder datasetFacetsBuilder) {
-    String namespace;
-    String name;
-
-    // Check if it's Cosmos DB
-    if (relation.table().name().contains("com.azure.cosmos.spark.items.")) {
-      log.debug("Found a Cosmos DB Table based on relation name");
-      String relationName = relation.table().name().replace("com.azure.cosmos.spark.items.", "");
-      int expectedParts = 3;
-      String[] tableParts = relationName.split("\\.", expectedParts);
-
-      if (tableParts.length != expectedParts) {
-        name = relationName;
-        namespace = relationName;
-      } else {
-        namespace =
-            String.format(
-                "azurecosmos://%s.documents.azure.com/dbs/%s", tableParts[0], tableParts[1]);
-        name = String.format("/colls/%s", tableParts[2]);
-      }
-
-    } else {
-      log.info("Failed to find a match for source without an identifier");
-      return Collections.emptyList();
-    }
-
-    return Collections.singletonList(
-        datasetFactory.getDataset(name, namespace, datasetFacetsBuilder.build()));
   }
 }
