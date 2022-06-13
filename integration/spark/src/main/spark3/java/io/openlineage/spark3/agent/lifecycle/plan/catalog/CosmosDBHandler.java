@@ -38,6 +38,7 @@ public class CosmosDBHandler implements CatalogHandler {
       TableCatalog tableCatalog,
       Identifier identifier,
       Map<String, String> properties) {
+
     // String namespace = "azurecosmos";
     // String relationName = relation.table().name().replace("com.azure.cosmos.spark.items.", "");
     // int expectedParts = 3;
