@@ -26,6 +26,9 @@ public class KustoRelationVisitor<D extends OpenLineage.Dataset>
   private static final String KUSTO_CLASS_NAME_2 =
       "com.microsoft.kusto.spark.datasource.DefaultSource";
 
+  private static final String KUSTO_CLASS_NAME_3 =
+      "com.microsoft.kusto.spark.datasink.DefaultSource";
+
   public KustoRelationVisitor(OpenLineageContext context, DatasetFactory<D> factory) {
     super(context);
     this.factory = factory;
@@ -46,10 +49,15 @@ public class KustoRelationVisitor<D extends OpenLineage.Dataset>
     //   log.error("haskusto classes check threw exception: ", e);
     // }
 
+    // TODO: Implement.
+
     return true;
   }
 
-  public static boolean isKustoClass(LogicalPlan plan) {
+  public static boolean isKustoClass(LogicalPlan plan) { // todo: Check this
+    log.error(
+        "isKustoClass, getClass.getName: ",
+        ((LogicalRelation) plan).relation().getClass().getName());
     return plan instanceof LogicalRelation
         && ((LogicalRelation) plan).relation().getClass().getName().equals(KUSTO_CLASS_NAME);
   }
@@ -59,7 +67,10 @@ public class KustoRelationVisitor<D extends OpenLineage.Dataset>
       return false;
     }
     log.error("Kusto provider class name: " + provider.getClass().getName());
-    return provider.getClass().getName().equals("com.microsoft.kusto.spark.datasink.DefaultSource");
+    return provider
+        .getClass()
+        .getName()
+        .equals("com.microsoft.kusto.spark.datasource.DefaultSource");
   }
 
   @Override
@@ -78,13 +89,16 @@ public class KustoRelationVisitor<D extends OpenLineage.Dataset>
   private Optional<String> getName(BaseRelation relation) {
     String tableName = "";
     try {
-
+      log.error("In getName!");
       // Object fieldDetails = FieldUtils.readField(relation, "query", true);
       Object kustoCoords = FieldUtils.readField(relation, "kustoCoordinates", true);
       // Object clusterUrl = FieldUtils.readField(kustoCoords, "clusterUrl", true);
       // Object clusterAlias = FieldUtils.readField(kustoCoords, "clusterAlias", true);
-      Object table = FieldUtils.readField(kustoCoords, "table", true);
-      tableName = (String) table;
+      // Object table = FieldUtils.readField(kustoCoords, "table", true);
+      Object query = FieldUtils.readField(relation, "query", true);
+      log.error("this is the kustoCoords inside getName: ", kustoCoords);
+      tableName = (String) query;
+      log.error("this is the tablename inside getName: ", tableName);
     } catch (IllegalAccessException | IllegalArgumentException e) {
       log.warn("Unable to discover Kusto table property");
       return Optional.empty();
@@ -114,19 +128,36 @@ public class KustoRelationVisitor<D extends OpenLineage.Dataset>
     return Optional.of(url);
   } // end of getNameSpace
 
+  public List<OpenLineage.Dataset> createKustoDatasets(BaseRelation relation) {
+    List<OpenLineage.Dataset> output;
+    log.error("inside create dataset function");
+    Optional<String> name = getName(relation);
+    log.error("name: ", name);
+    Optional<String> namespace = getNameSpace(relation);
+    log.error("namespace: ", namespace);
+    if (name.isPresent() && namespace.isPresent()) {
+      output =
+          Collections.singletonList(
+              factory.getDataset(name.get(), namespace.get(), relation.schema()));
+    } else {
+      output = Collections.emptyList();
+    }
+    return output;
+  }
+
   @Override
   public List<D> apply(LogicalPlan x) {
     BaseRelation relation = ((LogicalRelation) x).relation();
     List<D> output;
     Optional<String> name = getName(relation);
+    log.error("inside apply function");
+    log.error("name: ", name);
     Optional<String> namespace = getNameSpace(relation);
+    log.error("namespace: ", namespace);
     if (name.isPresent() && namespace.isPresent()) {
       output =
           Collections.singletonList(
-              factory.getDataset(
-                  name.get(),
-                  namespace.get(),
-                  relation.schema())); // TODO: check what we need to put in the schema option
+              factory.getDataset(name.get(), namespace.get(), relation.schema()));
     } else {
       output = Collections.emptyList();
     }
