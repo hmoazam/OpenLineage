@@ -6,6 +6,7 @@ import io.openlineage.spark.api.OpenLineageContext;
 import io.openlineage.spark.api.QueryPlanVisitor;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.reflect.FieldUtils;
 import org.apache.spark.api.java.Optional;
@@ -13,6 +14,7 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan;
 import org.apache.spark.sql.execution.datasources.LogicalRelation;
 import org.apache.spark.sql.sources.BaseRelation;
 import org.apache.spark.sql.sources.CreatableRelationProvider;
+import org.apache.spark.sql.types.StructType;
 
 /** */
 @Slf4j
@@ -37,16 +39,16 @@ public class KustoRelationVisitor<D extends OpenLineage.Dataset>
   public static boolean hasKustoClasses() {
     // try {
     //   // KustoRelationVisitor.class.getClassLoader().loadClass(KUSTO_CLASS_NAME);
-    //   // log.error(
+    //   // log.info(
     //   // "haskusto classes check output class name 2: ",
     //   // KustoRelationVisitor.class.getClassLoader().loadClass(KUSTO_CLASS_NAME_2));
-    //   // log.error(
+    //   // log.info(
     //   //     "haskusto classes check output class name 1: ",
     //   // KustoRelationVisitor.class.getClassLoader().loadClass(KUSTO_CLASS_NAME));
     //   return true;
     // } catch (Exception e) {
     //   // swallow - we don't care
-    //   log.error("haskusto classes check threw exception: ", e);
+    //   log.info("HM: haskusto classes check threw exception: ", e);
     // }
 
     // TODO: Implement.
@@ -55,7 +57,7 @@ public class KustoRelationVisitor<D extends OpenLineage.Dataset>
   }
 
   public static boolean isKustoClass(LogicalPlan plan) { // todo: Check this
-    log.error(
+    log.info(
         "isKustoClass, getClass.getName: ",
         ((LogicalRelation) plan).relation().getClass().getName());
     return plan instanceof LogicalRelation
@@ -63,10 +65,11 @@ public class KustoRelationVisitor<D extends OpenLineage.Dataset>
   }
 
   public static boolean isKustoSource(CreatableRelationProvider provider) {
+    log.info("WJ: STarting isKustSource");
     if (!hasKustoClasses()) {
       return false;
     }
-    log.error("Kusto provider class name: " + provider.getClass().getName());
+    log.info("HM: Kusto provider class name: " + provider.getClass().getName());
     return provider
         .getClass()
         .getName()
@@ -75,6 +78,7 @@ public class KustoRelationVisitor<D extends OpenLineage.Dataset>
 
   @Override
   public boolean isDefinedAt(LogicalPlan plan) {
+    log.info("WJ: Starting IsDefinedAt");
     return isKustoClass(plan);
   }
 
@@ -86,19 +90,19 @@ public class KustoRelationVisitor<D extends OpenLineage.Dataset>
   // val clusterAlias = FieldUtils.readField(kustoCoords,"clusterAlias",true)
   // val table = FieldUtils.readField(kustoCoords,"table",true)
 
-  private Optional<String> getName(BaseRelation relation) {
+  private static Optional<String> getName(BaseRelation relation) {
     String tableName = "";
     try {
-      log.error("In getName!");
+      log.info("HM: In getName!");
       // Object fieldDetails = FieldUtils.readField(relation, "query", true);
       Object kustoCoords = FieldUtils.readField(relation, "kustoCoordinates", true);
       // Object clusterUrl = FieldUtils.readField(kustoCoords, "clusterUrl", true);
       // Object clusterAlias = FieldUtils.readField(kustoCoords, "clusterAlias", true);
       // Object table = FieldUtils.readField(kustoCoords, "table", true);
       Object query = FieldUtils.readField(relation, "query", true);
-      log.error("this is the kustoCoords inside getName: ", kustoCoords);
+      log.info(String.format("HM: this is the kustoCoords inside getName: %s", kustoCoords));
       tableName = (String) query;
-      log.error("this is the tablename inside getName: ", tableName);
+      log.info("HM: this is the tablename inside getName: {}", tableName);
     } catch (IllegalAccessException | IllegalArgumentException e) {
       log.warn("Unable to discover Kusto table property");
       return Optional.empty();
@@ -111,7 +115,7 @@ public class KustoRelationVisitor<D extends OpenLineage.Dataset>
     return Optional.of(tableName);
   } // end of getName
 
-  private Optional<String> getNameSpace(BaseRelation relation) {
+  private static Optional<String> getNameSpace(BaseRelation relation) {
     String url;
     try {
       // Object fieldDetails = FieldUtils.readField(relation, "query", true);
@@ -128,20 +132,29 @@ public class KustoRelationVisitor<D extends OpenLineage.Dataset>
     return Optional.of(url);
   } // end of getNameSpace
 
-  public List<OpenLineage.Dataset> createKustoDatasets(BaseRelation relation) {
-    List<OpenLineage.Dataset> output;
-    log.error("inside create dataset function");
-    Optional<String> name = getName(relation);
-    log.error("name: ", name);
-    Optional<String> namespace = getNameSpace(relation);
-    log.error("namespace: ", namespace);
-    if (name.isPresent() && namespace.isPresent()) {
-      output =
-          Collections.singletonList(
-              factory.getDataset(name.get(), namespace.get(), relation.schema()));
-    } else {
-      output = Collections.emptyList();
+  public static <D extends OpenLineage.Dataset> List<D> createKustoDatasets(
+      DatasetFactory<D> datasetFactory,
+      scala.collection.immutable.Map<String, String> options,
+      StructType schema) {
+    List<D> output;
+
+    Map<String, String> javaOptions =
+        io.openlineage.spark.agent.util.ScalaConversionUtils.fromMap(options);
+
+    for (String k : javaOptions.keySet()) {
+      log.info("Key: {} | Value: {}", k, javaOptions.get(k).toString());
     }
+
+    String name = javaOptions.get("kustotable");
+    String database = javaOptions.get("kustodatabase");
+    String kustocluster = javaOptions.get("kustocluster");
+
+    log.info("WJ NAME: {}", name);
+    log.info("WJ database: {}", database);
+    log.info("WJ kustocluster: {}", kustocluster);
+
+    String namespace = kustocluster + "/" + database;
+    output = Collections.singletonList(datasetFactory.getDataset(name, namespace, schema));
     return output;
   }
 
@@ -150,10 +163,10 @@ public class KustoRelationVisitor<D extends OpenLineage.Dataset>
     BaseRelation relation = ((LogicalRelation) x).relation();
     List<D> output;
     Optional<String> name = getName(relation);
-    log.error("inside apply function");
-    log.error("name: ", name);
+    log.info("HM: inside apply function");
+    log.info("HM: name: ", name);
     Optional<String> namespace = getNameSpace(relation);
-    log.error("namespace: ", namespace);
+    log.info("HM: namespace: ", namespace);
     if (name.isPresent() && namespace.isPresent()) {
       output =
           Collections.singletonList(
