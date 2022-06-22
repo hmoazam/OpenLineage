@@ -103,13 +103,9 @@ public class SaveIntoDataSourceCommandVisitor
     log.error("command.dataSource: " + command.dataSource());
 
     if (KustoRelationVisitor.isKustoSource(command.dataSource())) {
-      log.error("Found kusto source");
       return KustoRelationVisitor.createKustoDatasets(
           outputDataset(), command.options(), command.schema());
     }
-
-    // Look at the datasource coming through
-    log.error("command.dataSource: " + command.dataSource());
 
     if (command.dataSource().getClass().getName().contains("DeltaDataSource")) {
       if (command.options().contains("path")) {
