@@ -25,35 +25,15 @@ public class KustoRelationVisitor<D extends OpenLineage.Dataset>
   private static final String KUSTO_CLASS_NAME =
       "com.microsoft.kusto.spark.datasource.KustoRelation";
 
-  private static final String KUSTO_CLASS_NAME_2 =
-      "com.microsoft.kusto.spark.datasource.DefaultSource";
+  private static final String KUSTO_PROVIDER_CLASS_NAME =
+      "com.microsoft.kusto.spark.datasource.DefaultSource"; // Not used
 
-  private static final String KUSTO_CLASS_NAME_3 =
-      "com.microsoft.kusto.spark.datasink.DefaultSource";
+  private static final String KUSTO_URL_PREFIX = "https://";
+  private static final String KUSTO_URL_SUFFIX = ".kusto.windows.net";
 
   public KustoRelationVisitor(OpenLineageContext context, DatasetFactory<D> factory) {
     super(context);
     this.factory = factory;
-  }
-
-  public static boolean hasKustoClasses() {
-    // try {
-    //   // KustoRelationVisitor.class.getClassLoader().loadClass(KUSTO_CLASS_NAME);
-    //   // log.info(
-    //   // "haskusto classes check output class name 2: ",
-    //   // KustoRelationVisitor.class.getClassLoader().loadClass(KUSTO_CLASS_NAME_2));
-    //   // log.info(
-    //   //     "haskusto classes check output class name 1: ",
-    //   // KustoRelationVisitor.class.getClassLoader().loadClass(KUSTO_CLASS_NAME));
-    //   return true;
-    // } catch (Exception e) {
-    //   // swallow - we don't care
-    //   log.info("HM: haskusto classes check threw exception: ", e);
-    // }
-
-    // TODO: Implement.
-
-    return true;
   }
 
   public static boolean isKustoClass(LogicalPlan plan) { // todo: Check this
@@ -65,70 +45,75 @@ public class KustoRelationVisitor<D extends OpenLineage.Dataset>
   }
 
   public static boolean isKustoSource(CreatableRelationProvider provider) {
-    log.info("WJ: STarting isKustSource");
-    if (!hasKustoClasses()) {
-      return false;
-    }
     log.info("HM: Kusto provider class name: " + provider.getClass().getName());
-    return provider
-        .getClass()
-        .getName()
-        .equals("com.microsoft.kusto.spark.datasource.DefaultSource");
+    return provider.getClass().getName().equals(KUSTO_PROVIDER_CLASS_NAME);
+  }
+
+  public static boolean hasKustoClasses() {
+    log.info("trying to load kusto class name in hasKustoClasses");
+    try {
+      KustoRelationVisitor.class.getClassLoader().loadClass(KUSTO_CLASS_NAME); // this doesn't work
+      return true;
+    } catch (Exception e) {
+      // swallow- we don't care
+    }
+    return true;
   }
 
   @Override
   public boolean isDefinedAt(LogicalPlan plan) {
-    log.info("WJ: Starting IsDefinedAt");
     return isKustoClass(plan);
   }
-
-  // val fieldDetails = FieldUtils.readField(sqlBaseRelation,"query",true)
-  // val kustoCoords = FieldUtils.readField(sqlBaseRelation,"kustoCoordinates",true) //class
-  // KustoCoordinates(clusterUrl: String, clusterAlias: String, database: String, table:
-  // Option[String] = None)
-  // val clusterUrl = FieldUtils.readField(kustoCoords,"clusterUrl",true)
-  // val clusterAlias = FieldUtils.readField(kustoCoords,"clusterAlias",true)
-  // val table = FieldUtils.readField(kustoCoords,"table",true)
 
   private static Optional<String> getName(BaseRelation relation) {
     String tableName = "";
     try {
-      log.info("HM: In getName!");
-      // Object fieldDetails = FieldUtils.readField(relation, "query", true);
-      Object kustoCoords = FieldUtils.readField(relation, "kustoCoordinates", true);
-      // Object clusterUrl = FieldUtils.readField(kustoCoords, "clusterUrl", true);
-      // Object clusterAlias = FieldUtils.readField(kustoCoords, "clusterAlias", true);
-      // Object table = FieldUtils.readField(kustoCoords, "table", true);
       Object query = FieldUtils.readField(relation, "query", true);
-      log.info(String.format("HM: this is the kustoCoords inside getName: %s", kustoCoords));
       tableName = (String) query;
-      log.info("HM: this is the tablename inside getName: {}", tableName);
     } catch (IllegalAccessException | IllegalArgumentException e) {
       log.warn("Unable to discover Kusto table property");
       return Optional.empty();
     }
+
     if (tableName == "") {
       log.warn("Unable to discover Kusto table property");
       return Optional.empty();
     }
-    // TODO: see what to do with complex queries which come under fieldDetails
+    // Check if the query is complex
+    int n = tableName.length();
+    int countPipes = 0;
+    for (int i = 0; i < n; i++) {
+      if (tableName.charAt(i) == '|') {
+        countPipes++;
+      }
+    }
+    if (countPipes > 0) {
+      tableName = "COMPLEX";
+    }
     return Optional.of(tableName);
   } // end of getName
 
   private static Optional<String> getNameSpace(BaseRelation relation) {
     String url;
+    String databaseName;
+    String url_prefix;
     try {
-      // Object fieldDetails = FieldUtils.readField(relation, "query", true);
       Object kustoCoords = FieldUtils.readField(relation, "kustoCoordinates", true);
       Object clusterUrl = FieldUtils.readField(kustoCoords, "clusterUrl", true);
-      url = (String) clusterUrl;
+      Object database = FieldUtils.readField(kustoCoords, "database", true);
+
+      url_prefix = (String) clusterUrl;
+      databaseName = (String) database;
+      url = url_prefix + "/" + databaseName;
+
     } catch (IllegalAccessException | IllegalArgumentException e) {
-      log.warn("Unable to discover clusterUrl property");
+      log.warn("Unable to discover clusterUrl or database property");
       return Optional.empty();
     }
     if (url == "") {
       return Optional.empty();
     }
+
     return Optional.of(url);
   } // end of getNameSpace
 
@@ -141,19 +126,11 @@ public class KustoRelationVisitor<D extends OpenLineage.Dataset>
     Map<String, String> javaOptions =
         io.openlineage.spark.agent.util.ScalaConversionUtils.fromMap(options);
 
-    for (String k : javaOptions.keySet()) {
-      log.info("Key: {} | Value: {}", k, javaOptions.get(k).toString());
-    }
-
     String name = javaOptions.get("kustotable");
     String database = javaOptions.get("kustodatabase");
-    String kustocluster = javaOptions.get("kustocluster");
+    String kustoCluster = javaOptions.get("kustocluster");
 
-    log.info("WJ NAME: {}", name);
-    log.info("WJ database: {}", database);
-    log.info("WJ kustocluster: {}", kustocluster);
-
-    String namespace = kustocluster + "/" + database;
+    String namespace = KUSTO_URL_PREFIX + kustoCluster + KUSTO_URL_SUFFIX + "/" + database;
     output = Collections.singletonList(datasetFactory.getDataset(name, namespace, schema));
     return output;
   }
@@ -163,10 +140,7 @@ public class KustoRelationVisitor<D extends OpenLineage.Dataset>
     BaseRelation relation = ((LogicalRelation) x).relation();
     List<D> output;
     Optional<String> name = getName(relation);
-    log.info("HM: inside apply function");
-    log.info("HM: name: ", name);
     Optional<String> namespace = getNameSpace(relation);
-    log.info("HM: namespace: ", namespace);
     if (name.isPresent() && namespace.isPresent()) {
       output =
           Collections.singletonList(
