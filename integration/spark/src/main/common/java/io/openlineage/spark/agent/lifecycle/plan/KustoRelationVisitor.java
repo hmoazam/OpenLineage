@@ -31,31 +31,67 @@ public class KustoRelationVisitor<D extends OpenLineage.Dataset>
   private static final String KUSTO_URL_PREFIX = "https://";
   private static final String KUSTO_URL_SUFFIX = ".kusto.windows.net";
 
+  private static final String KUSTO_PREFIX = "azurekusto://";
+
   public KustoRelationVisitor(OpenLineageContext context, DatasetFactory<D> factory) {
     super(context);
     this.factory = factory;
   }
 
-  public static boolean isKustoClass(LogicalPlan plan) { // todo: Check this
-    log.info(
-        "isKustoClass, getClass.getName: ",
-        ((LogicalRelation) plan).relation().getClass().getName());
+  public static boolean isKustoClass(LogicalPlan plan) {
     return plan instanceof LogicalRelation
         && ((LogicalRelation) plan).relation().getClass().getName().equals(KUSTO_CLASS_NAME);
   }
 
   public static boolean isKustoSource(CreatableRelationProvider provider) {
-    log.info("HM: Kusto provider class name: " + provider.getClass().getName());
     return provider.getClass().getName().equals(KUSTO_PROVIDER_CLASS_NAME);
   }
 
   public static boolean hasKustoClasses() {
-    log.info("trying to load kusto class name in hasKustoClasses");
     try {
-      KustoRelationVisitor.class.getClassLoader().loadClass(KUSTO_CLASS_NAME); // this doesn't work
+      log.info("Try #1");
+      KustoRelationVisitor.class
+          .getClassLoader()
+          .loadClass("com.microsoft.kusto.spark.datasource.KustoSourceOptions");
       return true;
     } catch (Exception e) {
-      // swallow- we don't care
+      log.info("Exception raised for try #1");
+      try {
+        log.info("Try #2");
+        KustoRelationVisitor.class
+            .getClassLoader()
+            .loadClass("com.microsoft.kusto.spark.datasource.DefaultSource");
+        return true;
+      } catch (Exception e2) {
+        log.info("Exception raised for try #2");
+        try {
+          log.info("Try #3");
+          KustoRelationVisitor.class
+              .getClassLoader()
+              .loadClass("com.microsoft.kusto.spark.datasource.KustoRelation");
+          return true;
+        } catch (Exception e3) {
+          log.info("Exception raised for try #3");
+          try {
+            log.info("Try #4");
+            KustoRelationVisitor.class
+                .getClassLoader()
+                .loadClass("com.microsoft.kusto.spark.datasource.KustoFilter");
+            return true;
+          } catch (Exception e4) {
+            log.info("Exception raised for try #4");
+            try {
+              log.info("Try #5");
+              KustoRelationVisitor.class
+                  .getClassLoader()
+                  .loadClass("org.apache.spark.sql.sources.BaseRelation");
+              return true;
+            } catch (Exception e5) {
+              log.info("Exception raised for try #5");
+            }
+          }
+        }
+      }
     }
     return true;
   }
@@ -104,7 +140,7 @@ public class KustoRelationVisitor<D extends OpenLineage.Dataset>
 
       url_prefix = (String) clusterUrl;
       databaseName = (String) database;
-      url = url_prefix + "/" + databaseName;
+      url = KUSTO_PREFIX + url_prefix + "/" + databaseName;
 
     } catch (IllegalAccessException | IllegalArgumentException e) {
       log.warn("Unable to discover clusterUrl or database property");
@@ -130,7 +166,8 @@ public class KustoRelationVisitor<D extends OpenLineage.Dataset>
     String database = javaOptions.get("kustodatabase");
     String kustoCluster = javaOptions.get("kustocluster");
 
-    String namespace = KUSTO_URL_PREFIX + kustoCluster + KUSTO_URL_SUFFIX + "/" + database;
+    String namespace =
+        KUSTO_PREFIX + KUSTO_URL_PREFIX + kustoCluster + KUSTO_URL_SUFFIX + "/" + database;
     output = Collections.singletonList(datasetFactory.getDataset(name, namespace, schema));
     return output;
   }
