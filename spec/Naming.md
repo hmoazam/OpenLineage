@@ -124,6 +124,22 @@ Identifier:
  * Unique name: {schema}.{table}
    * URI = sqlserver://{host}:{port};database={database}/{schema}.{table}
 
+#### Azure Data Explorer:
+Datasource hierarchy:
+ * Host: \<clustername>.\<clusterlocation> 
+ * Database
+ * Table
+ 
+Naming hierarchy:
+ * Database
+ * Table
+
+Identifier:
+ * Namespace: azurekusto://{host}.kusto.windows.net/{database}
+   * Scheme = azurekusto
+ * Unique name: {database}/{table}
+   * URI = azurekusto://{host}.kusto.windows.net/{database}/{table}
+
 ### Distributed file systems/blob stores
 #### GCS
 Datasource hierarchy: none, naming is global
