@@ -96,16 +96,16 @@ public class SaveIntoDataSourceCommandVisitor
           command.schema());
     }
 
+    if (KustoRelationVisitor.isKustoSource(command.dataSource())) {
+      return KustoRelationVisitor.createKustoDatasets(
+          outputDataset(), command.options(), command.schema());
+    }
+
     StructType schema = getSchema(command);
     LifecycleStateChange lifecycleStateChange =
         (SaveMode.Overwrite == command.mode()) ? OVERWRITE : CREATE;
     // Look at the datasource coming through
     log.error("command.dataSource: " + command.dataSource());
-
-    if (KustoRelationVisitor.isKustoSource(command.dataSource())) {
-      return KustoRelationVisitor.createKustoDatasets(
-          outputDataset(), command.options(), command.schema());
-    }
 
     if (command.dataSource().getClass().getName().contains("DeltaDataSource")) {
       if (command.options().contains("path")) {
