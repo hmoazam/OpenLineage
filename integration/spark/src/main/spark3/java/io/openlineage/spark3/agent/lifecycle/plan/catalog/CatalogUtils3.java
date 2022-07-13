@@ -12,6 +12,7 @@ import java.util.stream.Collectors;
 import org.apache.spark.sql.SparkSession;
 import org.apache.spark.sql.connector.catalog.Identifier;
 import org.apache.spark.sql.connector.catalog.TableCatalog;
+import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation;
 
 public class CatalogUtils3 {
 
@@ -28,6 +29,22 @@ public class CatalogUtils3 {
             new CosmosDBHandler());
     return handlers.stream().filter(CatalogHandler::hasClasses).collect(Collectors.toList());
   }
+
+  // Cosmos 
+  public static DatasetIdentifier getDatasetIdentifier(DataSourceV2Relation relation) {
+    return getDatasetIdentifier(relation);
+  }
+
+  public static DatasetIdentifier getDatasetIdentifier(
+    DataSourceV2Relation relation, TableCatalog catalog, List<CatalogHandler> handlers) {
+      return handlers.stream()
+        .filter(handler -> handler.isClass(relation))
+        .map(handler -> handler.getDatasetIdentifier(relation))
+        .findAny()
+        .orElseThrow(() -> new UnsupportedCatalogException(catalog.getClass().getCanonicalName()));
+    }
+
+// ------------------------------------------------------------------------------------------------
 
   public static DatasetIdentifier getDatasetIdentifier(
       SparkSession session,
@@ -55,8 +72,14 @@ public class CatalogUtils3 {
     return catalogHandlers.stream().filter(handler -> handler.isClass(catalog)).findAny();
   }
 
+  // Not sure about this
+  public static Optional<CatalogHandler> getCatalogHandler(TableCatalog catalog, DatasourceV2Relation relation) {
+    return catalogHandlers.stream().filter(handler -> handler.isClass(catalog, relation)).findAny();
+  }
+
   public static Optional<TableProviderFacet> getTableProviderFacet(
       TableCatalog catalog, Map<String, String> properties) {
+        // check relation is None
     Optional<CatalogHandler> catalogHandler = getCatalogHandler(catalog);
     return catalogHandler.isPresent()
         ? catalogHandler.get().getTableProviderFacet(properties)

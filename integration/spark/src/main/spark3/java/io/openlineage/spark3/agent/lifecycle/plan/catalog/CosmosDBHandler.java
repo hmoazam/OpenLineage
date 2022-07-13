@@ -13,7 +13,6 @@ import org.apache.spark.sql.connector.catalog.TableCatalog;
 @Slf4j
 public class CosmosDBHandler implements CatalogHandler {
   public boolean hasClasses() {
-    System.out.println("Checking cosmos class");
     try {
       CosmosDBHandler.class.getClassLoader().loadClass("com.azure.cosmos.spark.CosmosCatalog");
       System.out.println("Successfully checked cosmos class");

@@ -9,6 +9,8 @@ import java.util.Optional;
 import org.apache.spark.sql.SparkSession;
 import org.apache.spark.sql.connector.catalog.Identifier;
 import org.apache.spark.sql.connector.catalog.TableCatalog;
+import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation;
+
 
 public interface CatalogHandler {
   boolean hasClasses();
@@ -19,7 +21,16 @@ public interface CatalogHandler {
       SparkSession session,
       TableCatalog tableCatalog,
       Identifier identifier,
-      Map<String, String> properties);
+      Map<String, String> properties
+      );
+
+// Cosmos
+  default DatasetIdentifier getDatasetIdentifier(
+    DataSourceV2Relation relation) {
+      return 
+    }
+
+  boolean isClass(DataSourceV2Relation)
 
   default Optional<TableProviderFacet> getTableProviderFacet(Map<String, String> properties) {
     return Optional.empty();
