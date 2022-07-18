@@ -52,48 +52,22 @@ public class KustoRelationVisitor<D extends OpenLineage.Dataset>
       log.info("Try #1");
       KustoRelationVisitor.class
           .getClassLoader()
-          .loadClass("com.microsoft.kusto.spark.datasource.KustoSourceOptions");
+          .loadClass("com.microsoft.kusto.spark.datasource.DefaultSource");
       return true;
     } catch (Exception e) {
-      log.info("Exception raised for try #1");
-      try {
-        log.info("Try #2");
-        KustoRelationVisitor.class
-            .getClassLoader()
-            .loadClass("com.microsoft.kusto.spark.datasource.DefaultSource");
-        return true;
-      } catch (Exception e2) {
-        log.info("Exception raised for try #2");
-        try {
-          log.info("Try #3");
-          KustoRelationVisitor.class
-              .getClassLoader()
-              .loadClass("com.microsoft.kusto.spark.datasource.KustoRelation");
-          return true;
-        } catch (Exception e3) {
-          log.info("Exception raised for try #3");
-          try {
-            log.info("Try #4");
-            KustoRelationVisitor.class
-                .getClassLoader()
-                .loadClass("com.microsoft.kusto.spark.datasource.KustoFilter");
-            return true;
-          } catch (Exception e4) {
-            log.info("Exception raised for try #4");
-            try {
-              log.info("Try #5");
-              KustoRelationVisitor.class
-                  .getClassLoader()
-                  .loadClass("org.apache.spark.sql.sources.BaseRelation");
-              return true;
-            } catch (Exception e5) {
-              log.info("Exception raised for try #5");
-            }
-          }
-        }
-      }
+      // swallow
     }
-    return true;
+    try {
+      log.info("Try #2");
+      Thread.currentThread()
+          .getContextClassLoader()
+          .loadClass("com.microsoft.kusto.spark.datasource.DefaultSource");
+      return true;
+    } catch (Exception e) {
+      // swallow
+    }
+
+    return false;
   }
 
   @Override
