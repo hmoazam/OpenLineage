@@ -28,7 +28,6 @@ public class KustoRelationVisitor<D extends OpenLineage.Dataset>
   private static final String KUSTO_PROVIDER_CLASS_NAME =
       "com.microsoft.kusto.spark.datasource.DefaultSource"; // Not used
 
-  private static final String KUSTO_URL_PREFIX = "https://";
   private static final String KUSTO_URL_SUFFIX = ".kusto.windows.net";
 
   private static final String KUSTO_PREFIX = "azurekusto://";
@@ -49,22 +48,20 @@ public class KustoRelationVisitor<D extends OpenLineage.Dataset>
 
   public static boolean hasKustoClasses() {
     try {
-      log.info("Try #1");
       KustoRelationVisitor.class
           .getClassLoader()
           .loadClass("com.microsoft.kusto.spark.datasource.DefaultSource");
       return true;
     } catch (Exception e) {
-      // swallow
+      // swallow - we don't care
     }
     try {
-      log.info("Try #2");
       Thread.currentThread()
           .getContextClassLoader()
           .loadClass("com.microsoft.kusto.spark.datasource.DefaultSource");
       return true;
     } catch (Exception e) {
-      // swallow
+      // swallow - we don't care
     }
 
     return false;
@@ -106,15 +103,16 @@ public class KustoRelationVisitor<D extends OpenLineage.Dataset>
   private static Optional<String> getNameSpace(BaseRelation relation) {
     String url;
     String databaseName;
-    String url_prefix;
+    String kustoUrl;
     try {
       Object kustoCoords = FieldUtils.readField(relation, "kustoCoordinates", true);
       Object clusterUrl = FieldUtils.readField(kustoCoords, "clusterUrl", true);
       Object database = FieldUtils.readField(kustoCoords, "database", true);
 
-      url_prefix = (String) clusterUrl;
+      kustoUrl = (String) clusterUrl;
+      kustoUrl = kustoUrl.replace("https://", "");
       databaseName = (String) database;
-      url = KUSTO_PREFIX + url_prefix + "/" + databaseName;
+      url = KUSTO_PREFIX + kustoUrl + "/" + databaseName;
 
     } catch (IllegalAccessException | IllegalArgumentException e) {
       log.warn("Unable to discover clusterUrl or database property");
@@ -140,8 +138,7 @@ public class KustoRelationVisitor<D extends OpenLineage.Dataset>
     String database = javaOptions.get("kustodatabase");
     String kustoCluster = javaOptions.get("kustocluster");
 
-    String namespace =
-        KUSTO_PREFIX + KUSTO_URL_PREFIX + kustoCluster + KUSTO_URL_SUFFIX + "/" + database;
+    String namespace = KUSTO_PREFIX + kustoCluster + KUSTO_URL_SUFFIX + "/" + database;
     output = Collections.singletonList(datasetFactory.getDataset(name, namespace, schema));
     return output;
   }
