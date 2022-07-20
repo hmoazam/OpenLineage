@@ -96,6 +96,7 @@ public class SaveIntoDataSourceCommandVisitor
           command.schema());
     }
 
+    KustoRelationVisitor.isKustoSource(command.dataSource());
     if (KustoRelationVisitor.isKustoSource(command.dataSource())) {
       return KustoRelationVisitor.createKustoDatasets(
           outputDataset(), command.options(), command.schema());
