@@ -1,3 +1,8 @@
+/*
+/* Copyright 2018-2022 contributors to the OpenLineage project
+/* SPDX-License-Identifier: Apache-2.0
+*/
+
 package io.openlineage.spark.agent.lifecycle.plan;
 
 import io.openlineage.client.OpenLineage;
@@ -8,6 +13,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.reflect.FieldUtils;
 import org.apache.spark.api.java.Optional;
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan;
@@ -16,7 +22,11 @@ import org.apache.spark.sql.sources.BaseRelation;
 import org.apache.spark.sql.sources.CreatableRelationProvider;
 import org.apache.spark.sql.types.StructType;
 
-/** */
+/**
+ * {@link LogicalPlan} visitor that matches the KustoRelation that comes from the Azure Kusto (Azure
+ * Data Factory). The KustoRelation is used to extract the table name and database name to populate
+ * the {@link OpenLineage.Dataset} during Kusto read operations.
+ */
 @Slf4j
 public class KustoRelationVisitor<D extends OpenLineage.Dataset>
     extends QueryPlanVisitor<LogicalRelation, D> {
@@ -26,7 +36,7 @@ public class KustoRelationVisitor<D extends OpenLineage.Dataset>
       "com.microsoft.kusto.spark.datasource.KustoRelation";
 
   private static final String KUSTO_PROVIDER_CLASS_NAME =
-      "com.microsoft.kusto.spark.datasource.DefaultSource"; // Not used
+      "com.microsoft.kusto.spark.datasource.DefaultSource";
 
   private static final String KUSTO_URL_SUFFIX = ".kusto.windows.net";
 
@@ -37,7 +47,7 @@ public class KustoRelationVisitor<D extends OpenLineage.Dataset>
     this.factory = factory;
   }
 
-  public static boolean isKustoClass(LogicalPlan plan) {
+  protected boolean isKustoClass(LogicalPlan plan) {
     return plan instanceof LogicalRelation
         && ((LogicalRelation) plan).relation().getClass().getName().equals(KUSTO_CLASS_NAME);
   }
@@ -47,18 +57,21 @@ public class KustoRelationVisitor<D extends OpenLineage.Dataset>
   }
 
   public static boolean hasKustoClasses() {
+    /**
+     * Checking the Kusto class with both KustoRelationVisitor.class.getClassLoader.loadClass and
+     * Thread.currentThread().getContextClassLoader().loadClass. The first checks if the class is
+     * present on the classpath, and the second one is a catchall which captures if the class has
+     * been installed. This is relevant for Azure Databricks where jars can be installed and
+     * accessible to the user, even if they are not present on the classpath.
+     */
     try {
-      KustoRelationVisitor.class
-          .getClassLoader()
-          .loadClass("com.microsoft.kusto.spark.datasource.DefaultSource");
+      KustoRelationVisitor.class.getClassLoader().loadClass(KUSTO_PROVIDER_CLASS_NAME);
       return true;
     } catch (Exception e) {
       // swallow - we don't care
     }
     try {
-      Thread.currentThread()
-          .getContextClassLoader()
-          .loadClass("com.microsoft.kusto.spark.datasource.DefaultSource");
+      Thread.currentThread().getContextClassLoader().loadClass(KUSTO_PROVIDER_CLASS_NAME);
       return true;
     } catch (Exception e) {
       // swallow - we don't care
@@ -82,25 +95,19 @@ public class KustoRelationVisitor<D extends OpenLineage.Dataset>
       return Optional.empty();
     }
 
-    if (tableName == "") {
+    if (tableName.equals("")) {
       log.warn("Unable to discover Kusto table property");
       return Optional.empty();
     }
     // Check if the query is complex
-    int n = tableName.length();
-    int countPipes = 0;
-    for (int i = 0; i < n; i++) {
-      if (tableName.charAt(i) == '|') {
-        countPipes++;
-      }
-    }
-    if (countPipes > 0) {
+    if (StringUtils.countMatches(tableName, "|") > 0) {
       tableName = "COMPLEX";
     }
+
     return Optional.of(tableName);
   } // end of getName
 
-  private static Optional<String> getNameSpace(BaseRelation relation) {
+  private static Optional<String> getNamespace(BaseRelation relation) {
     String url;
     String databaseName;
     String kustoUrl;
@@ -112,23 +119,24 @@ public class KustoRelationVisitor<D extends OpenLineage.Dataset>
       kustoUrl = (String) clusterUrl;
       kustoUrl = kustoUrl.replace("https://", "");
       databaseName = (String) database;
-      url = KUSTO_PREFIX + kustoUrl + "/" + databaseName;
-
+      // url = KUSTO_PREFIX + kustoUrl + "/" + databaseName;
+      url = String.format("%s%s/%s", KUSTO_PREFIX, kustoUrl, databaseName);
     } catch (IllegalAccessException | IllegalArgumentException e) {
       log.warn("Unable to discover clusterUrl or database property");
       return Optional.empty();
     }
-    if (url == "") {
+    if (url.equals("")) {
       return Optional.empty();
     }
 
     return Optional.of(url);
-  } // end of getNameSpace
+  }
 
   public static <D extends OpenLineage.Dataset> List<D> createKustoDatasets(
       DatasetFactory<D> datasetFactory,
       scala.collection.immutable.Map<String, String> options,
       StructType schema) {
+    // Called from SaveIntoDataSourceCommandVisitor on Kusto write operations.
     List<D> output;
 
     Map<String, String> javaOptions =
@@ -138,7 +146,9 @@ public class KustoRelationVisitor<D extends OpenLineage.Dataset>
     String database = javaOptions.get("kustodatabase");
     String kustoCluster = javaOptions.get("kustocluster");
 
-    String namespace = KUSTO_PREFIX + kustoCluster + KUSTO_URL_SUFFIX + "/" + database;
+    // String namespace = KUSTO_PREFIX + kustoCluster + KUSTO_URL_SUFFIX + "/" + database;
+    String namespace =
+        String.format("%s%s%s/%s", KUSTO_PREFIX, kustoCluster, KUSTO_URL_SUFFIX, database);
     output = Collections.singletonList(datasetFactory.getDataset(name, namespace, schema));
     return output;
   }
@@ -148,7 +158,7 @@ public class KustoRelationVisitor<D extends OpenLineage.Dataset>
     BaseRelation relation = ((LogicalRelation) x).relation();
     List<D> output;
     Optional<String> name = getName(relation);
-    Optional<String> namespace = getNameSpace(relation);
+    Optional<String> namespace = getNamespace(relation);
     if (name.isPresent() && namespace.isPresent()) {
       output =
           Collections.singletonList(
@@ -158,4 +168,4 @@ public class KustoRelationVisitor<D extends OpenLineage.Dataset>
     }
     return output;
   }
-} // end of KustoRelationVisitor
+}

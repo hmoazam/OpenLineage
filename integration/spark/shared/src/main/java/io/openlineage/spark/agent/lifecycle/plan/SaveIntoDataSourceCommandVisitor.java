@@ -96,7 +96,9 @@ public class SaveIntoDataSourceCommandVisitor
           command.schema());
     }
 
-    KustoRelationVisitor.isKustoSource(command.dataSource());
+    // Similar to Kafka, Azure Kusto also has some special handling, so we use the below method
+    // for extracting the dataset from Kusto write operations.
+
     if (KustoRelationVisitor.isKustoSource(command.dataSource())) {
       return KustoRelationVisitor.createKustoDatasets(
           outputDataset(), command.options(), command.schema());
@@ -105,8 +107,6 @@ public class SaveIntoDataSourceCommandVisitor
     StructType schema = getSchema(command);
     LifecycleStateChange lifecycleStateChange =
         (SaveMode.Overwrite == command.mode()) ? OVERWRITE : CREATE;
-    // Look at the datasource coming through
-    log.error("command.dataSource: " + command.dataSource());
 
     if (command.dataSource().getClass().getName().contains("DeltaDataSource")) {
       if (command.options().contains("path")) {
