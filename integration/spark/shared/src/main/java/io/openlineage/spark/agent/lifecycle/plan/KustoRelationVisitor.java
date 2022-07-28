@@ -48,12 +48,24 @@ public class KustoRelationVisitor<D extends OpenLineage.Dataset>
   }
 
   protected boolean isKustoClass(LogicalPlan plan) {
-    return plan instanceof LogicalRelation
-        && ((LogicalRelation) plan).relation().getClass().getName().equals(KUSTO_CLASS_NAME);
+    try {
+      Class c = Thread.currentThread().getContextClassLoader().loadClass(KUSTO_CLASS_NAME);
+      return (plan instanceof LogicalRelation
+          && c.isAssignableFrom(((LogicalRelation) plan).relation().getClass()));
+    } catch (Exception e) {
+      // swallow - not a kusto class
+    }
+    return false;
   }
 
   public static boolean isKustoSource(CreatableRelationProvider provider) {
-    return provider.getClass().getName().equals(KUSTO_PROVIDER_CLASS_NAME);
+    try {
+      Class c = Thread.currentThread().getContextClassLoader().loadClass(KUSTO_PROVIDER_CLASS_NAME);
+      return c.isAssignableFrom(provider.getClass());
+    } catch (Exception e) {
+      // swallow - not a kusto source
+    }
+    return false;
   }
 
   public static boolean hasKustoClasses() {
@@ -95,7 +107,7 @@ public class KustoRelationVisitor<D extends OpenLineage.Dataset>
       return Optional.empty();
     }
 
-    if (tableName.equals("")) {
+    if ("".equals(tableName)) {
       log.warn("Unable to discover Kusto table property");
       return Optional.empty();
     }
@@ -125,7 +137,7 @@ public class KustoRelationVisitor<D extends OpenLineage.Dataset>
       log.warn("Unable to discover clusterUrl or database property");
       return Optional.empty();
     }
-    if (url.equals("")) {
+    if ("".equals(url)) {
       return Optional.empty();
     }
 
