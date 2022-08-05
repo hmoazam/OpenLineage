@@ -30,6 +30,16 @@ public class PlanUtils3 {
 
   public static Optional<DatasetIdentifier> getDatasetIdentifier(
       OpenLineageContext context, DataSourceV2Relation relation) {
+
+    log.info("relation identifier: {}", relation.identifier());
+    log.info("relation identifier is empty? : {}", relation.identifier().isEmpty());
+    if (relation.identifier().isEmpty()) {
+      // Since identifier is null, short circuit and check if we can get the dataset identifer
+      // from the relation itself.
+      log.info("relation identifier is null");
+      return getDatasetIdentifierFromRelation(relation);
+    }
+
     return Optional.of(relation)
         .filter(r -> r.identifier() != null)
         .filter(r -> r.identifier().isDefined())
@@ -67,6 +77,19 @@ public class PlanUtils3 {
     }
   }
 
+  private static Optional<DatasetIdentifier> getDatasetIdentifierFromRelation(
+      DataSourceV2Relation relation) {
+
+    try {
+      return (Optional.of(CatalogUtils3.getDatasetIdentifierFromRelation(relation)));
+    } catch (UnsupportedCatalogException ex) {
+      log.error(
+          String.format("Catalog %s is unsupported", ex.getMessage()),
+          ex); // update this if change the exception thrown in catalogutils
+      return Optional.empty();
+    }
+  }
+
   public static <D extends OpenLineage.Dataset> List<D> fromDataSourceV2Relation(
       DatasetFactory<D> datasetFactory, OpenLineageContext context, DataSourceV2Relation relation) {
     return fromDataSourceV2Relation(
@@ -79,9 +102,25 @@ public class PlanUtils3 {
       DataSourceV2Relation relation,
       OpenLineage.DatasetFacetsBuilder datasetFacetsBuilder) {
     // Get identifier for dataset, or return empty list
+    OpenLineage openLineage = context.getOpenLineage();
+    Optional<DatasetIdentifier> di;
     if (relation.identifier().isEmpty()) {
+      log.info("hi -1");
       log.warn("Couldn't find identifier for dataset in plan {}", relation);
-      return Collections.emptyList();
+      di = PlanUtils3.getDatasetIdentifier(context, relation);
+      if (!di.isPresent()) {
+        log.info("hi 0");
+        return Collections.emptyList();
+      } else {
+        log.info("hi 1");
+        datasetFacetsBuilder
+            .schema(PlanUtils.schemaFacet(openLineage, relation.schema()))
+            .dataSource(PlanUtils.datasourceFacet(openLineage, di.get().getNamespace()));
+        log.info("hi 2");
+        return Collections.singletonList(
+            datasetFactory.getDataset(
+                di.get().getName(), di.get().getNamespace(), datasetFacetsBuilder.build()));
+      }
     }
     Identifier identifier = relation.identifier().get();
 
@@ -93,14 +132,12 @@ public class PlanUtils3 {
     TableCatalog tableCatalog = (TableCatalog) relation.catalog().get();
 
     Map<String, String> tableProperties = relation.table().properties();
-    Optional<DatasetIdentifier> di =
-        PlanUtils3.getDatasetIdentifier(context, tableCatalog, identifier, tableProperties);
+    di = PlanUtils3.getDatasetIdentifier(context, tableCatalog, identifier, tableProperties);
 
     if (!di.isPresent()) {
       return Collections.emptyList();
     }
 
-    OpenLineage openLineage = context.getOpenLineage();
     datasetFacetsBuilder
         .schema(PlanUtils.schemaFacet(openLineage, relation.schema()))
         .dataSource(PlanUtils.datasourceFacet(openLineage, di.get().getNamespace()));
