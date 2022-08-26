@@ -46,6 +46,16 @@ public class IcebergHandler implements CatalogHandler {
       return true;
     } catch (Exception e) {
       // swallow- we don't care
+      log.info("Couldn't find iceberg handler 1");
+    }
+    try {
+      Thread.currentThread()
+          .getContextClassLoader()
+          .loadClass("org.apache.iceberg.catalog.Catalog");
+      return true;
+    } catch (Exception e) {
+      // swallow- we don't care
+      log.info("Couldn't find iceberg handler 2");
     }
     return false;
   }
