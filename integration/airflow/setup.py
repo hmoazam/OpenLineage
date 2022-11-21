@@ -44,7 +44,7 @@ extras_require = {
         "apache-airflow-providers-ssh>=2.1.0",
         "airflow-provider-great-expectations==0.1.5",
         "great-expectations<=0.15.23",
-        "protobuf==3.20.*",
+        "protobuf>=3.20,<4.22",
     ],
 }
 
